@@ -326,6 +326,13 @@
   <label class="ctl">遮罩 <input type="range" id="cover" min="0" max="90" step="5"><span id="coverv">0%</span></label>
   <div class="err" id="bgerr"></div>
 
+  <h3>关于</h3>
+  <p class="note" id="verline"></p>
+  <div class="row2">
+    <button id="checkup">检查更新</button>
+    <button id="hardreload">强制刷新</button>
+  </div>
+
   <h3>危险操作</h3>
   <button id="reset">清空所有学习进度</button>
 
@@ -362,10 +369,13 @@
 <input type="file" id="file" accept="image/*" hidden>
 <div id="toast"></div>
 
-<script src="words.js"></script>
+<script src="words.js?v=1"></script>
 <script>
 (function () {
   'use strict';
+
+  // 每次改完 index.html，把这行改成当前时间——线上和本地对比就能看出是不是旧版本
+  var BUILD = '2026-10-18T23:50';
 
   /* ===================== 常量 ===================== */
   var K = {
@@ -1605,6 +1615,40 @@
     }
   }
 
+  /* ===================== 版本 / 缓存 ===================== */
+  function updateVerline() {
+    if (!$('verline')) return;
+    var lm = '';
+    try { lm = document.lastModified || ''; } catch (e) {}
+    var proto = '';
+    try { proto = location.protocol; } catch (e) {}
+    $('verline').textContent = '版本 ' + BUILD +
+      (lm ? ' · 页面最后修改 ' + lm : '') +
+      (proto === 'file:' ? ' · 本地打开（file://）' : '');
+  }
+  function hardReload() {
+    try {
+      var base = location.href.split('#')[0].split('?')[0];
+      location.replace(base + '?v=' + Date.now());
+    } catch (e) { try { location.reload(); } catch (e2) {} }
+  }
+  function checkUpdate() {
+    if (typeof fetch !== 'function') { toast('这个环境不能检查更新'); return; }
+    toast('检查中…');
+    fetch('index.html?t=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (t) {
+      var m = t.match(/BUILD\s*=\s*'([^']+)'/);
+      var remote = m ? m[1] : '';
+      if (!remote) { toast('读不到线上版本号'); return; }
+      if (remote === BUILD) { toast('已是最新版本（' + BUILD + '）'); return; }
+      if (window.confirm('线上有新版本：' + remote + '\n本地：' + BUILD + '\n\n要强制刷新到新版吗？')) hardReload();
+    }).catch(function (e) {
+      toast('检查失败：' + ((e && e.message) ? e.message : '网络问题') + '（双击打开时改成用 start.bat）');
+    });
+  }
+
   /* ===================== 设置 ===================== */
   function openSheet() {
     buildFontRows();
@@ -1612,6 +1656,7 @@
     updateStats();
     updateSyncState();
     updateSoundUI();
+    updateVerline();
     $('ghtoken').value = syncCfg.token || '';
     $('ghauto').textContent = '自动同步：' + (syncCfg.auto ? '开' : '关');
     $('sheet').classList.add('show');
@@ -1725,6 +1770,8 @@
     });
     $('exportbtn').addEventListener('click', exportCode);
     $('importbtn').addEventListener('click', importCode);
+    $('checkup').addEventListener('click', checkUpdate);
+    $('hardreload').addEventListener('click', function () { hardReload(); });
     $('openwrong').addEventListener('click', function () {
       if (!wrongCount()) { toast('错词本还是空的'); return; }
       closeSheet(); setMode('wrong');
@@ -1863,6 +1910,8 @@
   initSettings();
   refreshSpeechInfo();
   updateStats();
+  updateVerline();
+  try { if (window.console) console.log('[cet4] 版本 ' + BUILD + ' · ' + location.href); } catch (e) {}
 
   store.set(K.la, Date.now());
   var bootMode = (mode === 'wrong' && !wrongCount()) ? 'today' : (mode || 'today');
